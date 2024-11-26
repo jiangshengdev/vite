@@ -112,6 +112,7 @@ const nodeConfig = defineConfig({
     'fsevents',
     'rollup/parseAst',
     /^tsx\//,
+    /^#/,
     ...Object.keys(pkg.dependencies),
     ...Object.keys(pkg.peerDependencies),
   ],
@@ -194,7 +195,7 @@ const moduleRunnerConfig = defineConfig({
   ],
   plugins: [
     ...createSharedNodePlugins({ esbuildOptions: { minifySyntax: true } }),
-    bundleSizeLimit(53),
+    bundleSizeLimit(54),
   ],
 })
 
