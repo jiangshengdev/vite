@@ -4,7 +4,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { performance } from 'node:perf_hooks'
-import { builtinModules, createRequire } from 'node:module'
+import { createRequire } from 'node:module'
 import colors from 'picocolors'
 import type { Alias, AliasOptions } from 'dep-types/alias'
 import { build } from 'esbuild'
@@ -621,7 +621,7 @@ export const configDefaults = Object.freeze({
     dedupe: [],
     /** @experimental */
     noExternal: [],
-    // external
+    external: [],
     preserveSymlinks: false,
     alias: [],
   },
@@ -782,7 +782,6 @@ function resolveEnvironmentOptions(
       options.build ?? {},
       logger,
       consumer,
-      isSsrTargetWebworkerEnvironment,
     ),
   }
 }
@@ -882,10 +881,7 @@ function resolveEnvironmentResolveOptions(
         consumer === 'client' || isSsrTargetWebworkerEnvironment
           ? DEFAULT_CLIENT_CONDITIONS
           : DEFAULT_SERVER_CONDITIONS.filter((c) => c !== 'browser'),
-      external:
-        consumer === 'server' && !isSsrTargetWebworkerEnvironment
-          ? builtinModules
-          : [],
+      enableBuiltinNoExternalCheck: !!isSsrTargetWebworkerEnvironment,
     },
     resolve ?? {},
   )
@@ -1858,7 +1854,13 @@ async function loadConfigFromBundledFile(
   // with --experimental-loader themselves, we have to do a hack here:
   // write it to disk, load it with native Node ESM, then delete the file.
   if (isESM) {
-    const nodeModulesDir = findNearestNodeModules(path.dirname(fileName))
+    // Storing the bundled file in node_modules/ is avoided for Deno
+    // because Deno only supports Node.js style modules under node_modules/
+    // and configs with `npm:` import statements will fail when executed.
+    const nodeModulesDir =
+      typeof process.versions.deno === 'string'
+        ? undefined
+        : findNearestNodeModules(path.dirname(fileName))
     if (nodeModulesDir) {
       await fsp.mkdir(path.resolve(nodeModulesDir, '.vite-temp/'), {
         recursive: true,
