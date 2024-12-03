@@ -1083,13 +1083,16 @@ export async function resolveConfig(
       configEnvironmentsSsr.optimizeDeps ?? {},
     )
 
-    configEnvironmentsSsr.resolve ??= {}
-    configEnvironmentsSsr.resolve.conditions ??= config.ssr?.resolve?.conditions
-    configEnvironmentsSsr.resolve.externalConditions ??=
-      config.ssr?.resolve?.externalConditions
-    configEnvironmentsSsr.resolve.mainFields ??= config.ssr?.resolve?.mainFields
-    configEnvironmentsSsr.resolve.external ??= config.ssr?.external
-    configEnvironmentsSsr.resolve.noExternal ??= config.ssr?.noExternal
+    configEnvironmentsSsr.resolve = mergeConfig(
+      {
+        conditions: config.ssr?.resolve?.conditions,
+        externalConditions: config.ssr?.resolve?.externalConditions,
+        mainFields: config.ssr?.resolve?.mainFields,
+        external: config.ssr?.external,
+        noExternal: config.ssr?.noExternal,
+      } satisfies EnvironmentResolveOptions,
+      configEnvironmentsSsr.resolve ?? {},
+    )
   }
 
   if (config.build?.ssrEmitAssets !== undefined) {
@@ -1145,6 +1148,11 @@ export async function resolveConfig(
     configEnv,
     config.ssr?.target === 'webworker',
   )
+
+  // Backward compatibility: merge config.environments.client.resolve back into config.resolve
+  config.resolve ??= {}
+  config.resolve.conditions = config.environments.client.resolve?.conditions
+  config.resolve.mainFields = config.environments.client.resolve?.mainFields
 
   const resolvedDefaultResolve = resolveResolveOptions(config.resolve, logger)
 
@@ -1857,14 +1865,23 @@ async function loadConfigFromBundledFile(
     // Storing the bundled file in node_modules/ is avoided for Deno
     // because Deno only supports Node.js style modules under node_modules/
     // and configs with `npm:` import statements will fail when executed.
-    const nodeModulesDir =
+    let nodeModulesDir =
       typeof process.versions.deno === 'string'
         ? undefined
         : findNearestNodeModules(path.dirname(fileName))
     if (nodeModulesDir) {
-      await fsp.mkdir(path.resolve(nodeModulesDir, '.vite-temp/'), {
-        recursive: true,
-      })
+      try {
+        await fsp.mkdir(path.resolve(nodeModulesDir, '.vite-temp/'), {
+          recursive: true,
+        })
+      } catch (e) {
+        if (e.code === 'EACCES') {
+          // If there is no access permission, a temporary configuration file is created by default.
+          nodeModulesDir = undefined
+        } else {
+          throw e
+        }
+      }
     }
     const hash = `timestamp-${Date.now()}-${Math.random().toString(16).slice(2)}`
     const tempFileName = nodeModulesDir
